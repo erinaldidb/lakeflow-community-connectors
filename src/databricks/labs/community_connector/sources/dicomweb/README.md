@@ -28,7 +28,7 @@ To configure the connector, provide the following parameters when creating your 
 | `externalOptionsAllowList` | string | Yes | Comma-separated list of table-specific option names that are allowed to be passed through to the connector. This connector requires table-specific options, so this parameter must be set. | See full list below |
 
 This connector supports the following table-specific options via `externalOptionsAllowList`:
-`fetch_dicom_files,dicom_volume_path,lookback_days,page_size,max_records_per_batch,fetch_metadata,wado_mode`
+`fetch_dicom_files,dicom_volume_path,lookback_days,page_size,max_records_per_batch,fetch_metadata,wado_mode,dicom_batch_size`
 
 > **Note**: Table-specific options such as `lookback_days`, `page_size`, or `fetch_dicom_files` are **not** connection parameters. They are provided per-table via `table_configuration` in the pipeline specification. These option names must be included in `externalOptionsAllowList` for the connection to allow them at runtime.
 
@@ -62,7 +62,7 @@ A Unity Catalog connection for this connector can be created in two ways via the
 
 1. Follow the **Lakeflow Community Connector** UI flow from the **Add Data** page.
 2. Select any existing Lakeflow Community Connector connection for this source or create a new one.
-3. Set `externalOptionsAllowList` to `fetch_dicom_files,dicom_volume_path,lookback_days,page_size,max_records_per_batch,fetch_metadata,wado_mode` (required for this connector to pass table-specific options).
+3. Set `externalOptionsAllowList` to `fetch_dicom_files,dicom_volume_path,lookback_days,page_size,max_records_per_batch,fetch_metadata,wado_mode,dicom_batch_size` (required for this connector to pass table-specific options).
 
 The connection can also be created using the standard Unity Catalog API, for example:
 
@@ -74,7 +74,7 @@ OPTIONS (
   auth_type                'none',
   connection_name          'my-pacs-prod',
   sourceName               'dicomweb',
-  externalOptionsAllowList 'fetch_dicom_files,dicom_volume_path,lookback_days,page_size,max_records_per_batch,fetch_metadata,wado_mode'
+  externalOptionsAllowList 'fetch_dicom_files,dicom_volume_path,lookback_days,page_size,max_records_per_batch,fetch_metadata,wado_mode,dicom_batch_size'
   -- For Basic auth, add:
   -- auth_type 'basic',
   -- username  'svc-dicom',
@@ -157,7 +157,7 @@ The DICOMweb connector exposes a **static list** of four tables corresponding to
 
 **Special columns:**
 
-- `dicom_file_path`: Populated only when the `fetch_dicom_files` table option is set to `true`. Files are written to the path specified by `dicom_volume_path`, organized as `{volume_path}/{study_instance_uid}/{series_instance_uid}/{sop_instance_uid}.dcm` (or `.jpg` for frame-based retrieval). If the download fails for a given instance, this field is set to `NULL` and the pipeline continues without interruption.
+- `dicom_file_path`: Populated only when the `fetch_dicom_files` table option is set to `true`. Files are written by Spark executors (which have Unity Catalog Volume FUSE access) to `{dicom_volume_path}/{study_instance_uid}/{series_instance_uid}/{sop_instance_uid}.dcm` (or `.jpg` for frame-based retrieval). Instances are batched across executors in groups of `dicom_batch_size` for parallel downloads. If the download fails for a given instance, this field is set to `NULL` and the pipeline continues without interruption.
 
 - `metadata`: Populated only when the `fetch_metadata` table option is set to `true`. Contains the complete DICOM JSON tag set for the instance as a VARIANT type. You can query individual DICOM tags using Databricks' semi-structured data access syntax:
   ```sql
@@ -217,10 +217,11 @@ The following options control how the connector reads data from the DICOMweb ser
 | `page_size` | studies, series, instances | No | `100` | Number of records per QIDO-RS request. Increase for large PACS systems (e.g., `500` or `1000` if the server supports it). |
 | `max_records_per_batch` | studies, series, instances | No | `500` | Maximum number of records to return per micro-batch. When this limit is reached mid-scan, the connector saves its position and resumes from that point on the next micro-batch. |
 | `lookback_days` | studies, series, instances | No | `1` | Number of days to subtract from the cursor date on each run. This overlap window catches late-arriving or backdated studies that might otherwise be missed. |
-| `fetch_dicom_files` | instances | No | `false` | When set to `true`, downloads each DICOM file (or image frame) via WADO-RS and writes it to the path specified by `dicom_volume_path`. |
+| `fetch_dicom_files` | instances | No | `false` | When set to `true`, downloads each DICOM file (or image frame) via WADO-RS and writes it to the path specified by `dicom_volume_path`. Downloads are distributed across Spark executors for parallelism. |
 | `dicom_volume_path` | instances | Conditional | -- | Unity Catalog Volume path where downloaded DICOM files are stored. Required when `fetch_dicom_files` is `true`. Example: `/Volumes/catalog/schema/dicom_files`. |
 | `wado_mode` | instances | No | `auto` | Controls how DICOM files are retrieved. `auto`: tries full `.dcm` retrieval first, falls back to frame retrieval on HTTP 404/406/415. `full`: always retrieves the complete `.dcm` file. `frames`: always retrieves the first image frame as `.jpg`. Use `frames` for servers that only support frame-level retrieval (e.g., Static DICOMweb / S3 Static WADO deployments). |
-| `fetch_metadata` | instances | No | `false` | When set to `true`, fetches the full DICOM JSON metadata for each instance via the WADO-RS metadata endpoint and stores it in the `metadata` column as VARIANT. |
+| `fetch_metadata` | instances | No | `false` | When set to `true`, fetches the full DICOM JSON metadata for each instance via the WADO-RS metadata endpoint and stores it in the `metadata` column as VARIANT. Metadata requests are distributed across Spark executors (one request per unique series per batch). |
+| `dicom_batch_size` | instances | No | `50` | Number of instances per executor partition when `fetch_dicom_files` or `fetch_metadata` is enabled. Increasing this reduces scheduling overhead but makes each task larger; decreasing it increases parallelism. Tune based on cluster size and average instance size. |
 
 ## Data Type Mapping
 
@@ -313,7 +314,7 @@ Example configuration ingesting all four tables:
 
 **Configuration notes:**
 - `source_table` must be one of: `studies`, `series`, `instances`, `diagnostics`.
-- Options such as `lookback_days`, `page_size`, `max_records_per_batch`, `fetch_dicom_files`, `dicom_volume_path`, `fetch_metadata`, and `wado_mode` go under `table_configuration` and must be listed in the connection's `externalOptionsAllowList`.
+- Options such as `lookback_days`, `page_size`, `max_records_per_batch`, `fetch_dicom_files`, `dicom_volume_path`, `fetch_metadata`, `wado_mode`, and `dicom_batch_size` go under `table_configuration` and must be listed in the connection's `externalOptionsAllowList`.
 - All table option values are passed as strings (e.g., `"200"`, `"true"`).
 - The `diagnostics` table requires no special table configuration options.
 
@@ -325,7 +326,8 @@ Example configuration ingesting all four tables:
 - **Set a realistic initial date range**: On the first run, the connector defaults to scanning all history (from `19000101`). For large PACS systems with millions of instances, this can be very slow. Limit the initial scan by setting an appropriate `lookback_days` or running with a recent date range.
 - **Use incremental sync**: After the initial load, the connector uses `study_date`-based cursors to fetch only new or recently modified records on each run. The `lookback_days` setting provides overlap to catch late-arriving or backdated studies.
 - **Tune `page_size`**: The default of `100` works well for most servers. For large PACS systems, increasing to `500` or `1000` can reduce the total number of API calls. Reduce `page_size` if the server times out on large result sets.
-- **Enable file retrieval selectively**: The `fetch_dicom_files` option issues one additional WADO-RS request per instance and should be enabled only when raw DICOM files are needed (e.g., for AI/ML image analysis pipelines). Each `.dcm` file can range from a few KB (text reports) to several hundred MB (CT/MR volumes).
+- **Enable file retrieval selectively**: The `fetch_dicom_files` option issues one additional WADO-RS request per instance and should be enabled only when raw DICOM files are needed (e.g., for AI/ML image analysis pipelines). Each `.dcm` file can range from a few KB (text reports) to several hundred MB (CT/MR volumes). Downloads are distributed across Spark executors in parallel batches of `dicom_batch_size` instances.
+- **Tune `dicom_batch_size` for file and metadata workloads**: When `fetch_dicom_files` or `fetch_metadata` is enabled, instance batches are processed in parallel across executors. The default of `50` works well for most cluster sizes. Increase it (e.g., `200`) on large clusters to reduce scheduling overhead; decrease it (e.g., `10`) if individual DICOM files are very large (CT/MR volumes) to avoid executor memory pressure.
 - **Monitor Volume storage**: When using `fetch_dicom_files`, plan Unity Catalog Volume capacity based on the expected data volume. Files are organized by `{study_instance_uid}/{series_instance_uid}/{sop_instance_uid}.dcm`.
 - **Schedule appropriately**: For near-real-time analytics, run every 15-30 minutes. For batch loads, a daily schedule is sufficient. Be aware that cloud-hosted DICOMweb endpoints (Azure, GCP) issue tokens that typically expire after 1 hour -- for long-running initial loads, token refresh must be handled externally.
 
@@ -349,8 +351,9 @@ Example configuration ingesting all four tables:
 
 - **`dicom_file_path` is NULL despite `fetch_dicom_files` being enabled**:
   - The connector handles download failures gracefully. If WADO-RS retrieval or the Volume write fails for a given instance, `dicom_file_path` is set to `NULL` and the pipeline continues.
-  - Verify the cluster's service principal has write (`WRITE FILES`) privilege on the target Volume.
+  - Verify the cluster's service principal has `WRITE FILES` privilege on the target Volume. File writes happen on Spark executors, so the executor identity needs this permission.
   - Check that WADO-RS is enabled on the PACS server.
+  - Confirm the `dicom_volume_path` points to an existing Unity Catalog Volume (`/Volumes/catalog/schema/volume_name`).
 
 - **Slow ingestion on first run**:
   - Set a recent start date or increase `lookback_days` from a recent cursor to limit the scan window.
