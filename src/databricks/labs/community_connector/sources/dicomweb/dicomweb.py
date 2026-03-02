@@ -401,6 +401,14 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
             logger.warning("Skipping WADO-RS: missing UIDs in record %s", record)
             return record
 
+        import os as _os
+        logger.debug(
+            "WADO-RS volume access check: path=%s exists=%s writable=%s",
+            volume_path,
+            _os.path.exists(volume_path),
+            _os.access(volume_path, _os.W_OK),
+        )
+
         try:
             effective_mode = self._resolve_wado_mode(wado_mode)
             if effective_mode == WADO_MODE_FRAMES:
