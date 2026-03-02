@@ -402,7 +402,7 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
             return record
 
         import os as _os
-        logger.debug(
+        logger.warning(
             "WADO-RS volume access check: path=%s exists=%s writable=%s",
             volume_path,
             _os.path.exists(volume_path),
