@@ -275,7 +275,8 @@ class TestConnector:
         self, dicomweb_options, studies_response, series_response, instances_response, tmp_path
     ):
         """wado_mode=auto: 404 from full endpoint triggers frame retrieval and caches detection."""
-        from requests import HTTPError
+        import urllib.error
+        from io import BytesIO
 
         connector = DICOMwebLakeflowConnect(dicomweb_options)
         connector._client.query_studies = MagicMock(side_effect=[studies_response[:1], []])
@@ -283,9 +284,13 @@ class TestConnector:
         connector._client.query_instances_for_series = MagicMock(return_value=instances_response[:1])
 
         # Full WADO-RS returns 404 → auto-detects frames mode
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-        http_error = HTTPError(response=mock_response)
+        http_error = urllib.error.HTTPError(
+            url="https://dicomweb.example.com/studies/x/series/y/instances/z",
+            code=404,
+            msg="Not Found",
+            hdrs=MagicMock(get=lambda k, d="": d),
+            fp=BytesIO(b""),
+        )
         connector._client.retrieve_instance = MagicMock(side_effect=http_error)
         connector._client.retrieve_instance_frames = MagicMock(return_value=b"\xff\xd8\xff\xe0JFIF")
 

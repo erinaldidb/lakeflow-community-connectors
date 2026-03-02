@@ -62,7 +62,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Iterator
 
 from pyspark.sql.types import StructType
-from requests.exceptions import HTTPError
+from urllib.error import HTTPError
 
 from databricks.labs.community_connector.interface.lakeflow_connect import LakeflowConnect
 from databricks.labs.community_connector.sources.dicomweb.dicomweb_client import DICOMwebClient
@@ -403,17 +403,11 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
                 except HTTPError as exc:
                     if (
                         wado_mode == WADO_MODE_AUTO
-                        and exc.response is not None
-                        and exc.response.status_code
-                        in (
-                            404,
-                            406,
-                            415,
-                        )
+                        and exc.code in (404, 406, 415)
                     ):
                         logger.info(
                             "WADO-RS full instance returned HTTP %d — auto-switching to frame retrieval",
-                            exc.response.status_code,
+                            exc.code,
                         )
                         self._wado_mode_detected = WADO_MODE_FRAMES
                         file_bytes = self._client.retrieve_instance_frames(study_uid, series_uid, sop_uid)

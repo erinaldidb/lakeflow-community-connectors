@@ -9,17 +9,19 @@ Supports three authentication modes:
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Any
-
-import requests
-from requests.auth import HTTPBasicAuth
 
 logger = logging.getLogger(__name__)
 
-# Default connect + read timeouts (seconds)
-_DEFAULT_TIMEOUT = (10, 60)
+# Default socket timeout (seconds) — used for connect + read
+_DEFAULT_TIMEOUT = 60
 
 
 class DICOMwebClient:
@@ -32,24 +34,42 @@ class DICOMwebClient:
         username: str | None = None,
         password: str | None = None,
         token: str | None = None,
-        timeout: tuple[int, int] = _DEFAULT_TIMEOUT,
+        timeout: int = _DEFAULT_TIMEOUT,
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-        self._session = requests.Session()
-        self._session.headers.update({"Accept": "application/dicom+json"})
+        # Accept both a plain int and the legacy (connect, read) tuple
+        self.timeout = max(timeout) if isinstance(timeout, tuple) else timeout
+        self._default_headers: dict[str, str] = {"Accept": "application/dicom+json"}
 
         auth_type = (auth_type or "none").lower()
         if auth_type == "basic":
             if not username or not password:
                 raise ValueError("auth_type=basic requires username and password")
-            self._session.auth = HTTPBasicAuth(username, password)
+            credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+            self._default_headers["Authorization"] = f"Basic {credentials}"
         elif auth_type == "bearer":
             if not token:
                 raise ValueError("auth_type=bearer requires token")
-            self._session.headers["Authorization"] = f"Bearer {token}"
+            self._default_headers["Authorization"] = f"Bearer {token}"
         elif auth_type != "none":
             raise ValueError(f"Unsupported auth_type '{auth_type}'. Use: none, basic, bearer")
+
+    # ------------------------------------------------------------------
+    # Internal HTTP helper
+    # ------------------------------------------------------------------
+
+    def _get(
+        self,
+        url: str,
+        extra_headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+    ):
+        """Execute a GET request and return an http.client.HTTPResponse."""
+        if params:
+            url = f"{url}?{urllib.parse.urlencode(params)}"
+        headers = {**self._default_headers, **(extra_headers or {})}
+        req = urllib.request.Request(url, headers=headers)
+        return urllib.request.urlopen(req, timeout=self.timeout)
 
     # ------------------------------------------------------------------
     # QIDO-RS helpers
@@ -59,15 +79,15 @@ class DICOMwebClient:
         """Execute a QIDO-RS GET and return the parsed JSON list."""
         url = f"{self.base_url}{path}"
         logger.debug("QIDO-RS GET %s params=%s", url, params)
-        resp = self._session.get(url, params=params, timeout=self.timeout)
-        if resp.status_code == 204:
+        resp = self._get(url, params=params)
+        if resp.status == 204:
             # No content — valid empty response
             return []
-        resp.raise_for_status()
+        body = resp.read()
         # Some servers return empty body instead of 204
-        if not resp.content:
+        if not body:
             return []
-        return resp.json()
+        return json.loads(body)
 
     def query_studies(
         self,
@@ -144,18 +164,13 @@ class DICOMwebClient:
         """
         url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}"
         logger.debug("WADO-RS GET %s", url)
-        resp = self._session.get(
-            url,
-            headers={"Accept": 'multipart/related; type="application/dicom"'},
-            timeout=self.timeout,
-        )
-        resp.raise_for_status()
-
+        resp = self._get(url, extra_headers={"Accept": 'multipart/related; type="application/dicom"'})
         content_type = resp.headers.get("Content-Type", "")
+        body = resp.read()
         if "multipart/related" in content_type:
-            return _extract_first_multipart_part(resp.content, content_type)
+            return _extract_first_multipart_part(body, content_type)
         # Some servers return raw DICOM directly
-        return resp.content
+        return body
 
     def retrieve_instance_frames(
         self,
@@ -183,16 +198,12 @@ class DICOMwebClient:
         """
         url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}/frames/{frame_number}"
         logger.debug("WADO-RS frames GET %s", url)
-        resp = self._session.get(
-            url,
-            headers={"Accept": "image/jpeg, image/png, application/octet-stream"},
-            timeout=self.timeout,
-        )
-        resp.raise_for_status()
+        resp = self._get(url, extra_headers={"Accept": "image/jpeg, image/png, application/octet-stream"})
         content_type = resp.headers.get("Content-Type", "")
+        body = resp.read()
         if "multipart/related" in content_type:
-            return _extract_first_multipart_part(resp.content, content_type)
-        return resp.content
+            return _extract_first_multipart_part(body, content_type)
+        return body
 
     def retrieve_instance_metadata(
         self,
@@ -221,17 +232,13 @@ class DICOMwebClient:
         """
         url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}/metadata"
         logger.debug("WADO-RS instance metadata GET %s", url)
-        resp = self._session.get(
-            url,
-            headers={"Accept": "application/dicom+json"},
-            timeout=self.timeout,
-        )
-        if resp.status_code == 204:
+        resp = self._get(url, extra_headers={"Accept": "application/dicom+json"})
+        if resp.status == 204:
             return {}
-        resp.raise_for_status()
-        if not resp.content:
+        body = resp.read()
+        if not body:
             return {}
-        data = resp.json()
+        data = json.loads(body)
         # Some servers return a list with one element, others return the object directly
         if isinstance(data, list):
             return data[0] if data else {}
@@ -262,17 +269,13 @@ class DICOMwebClient:
         """
         url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/metadata"
         logger.debug("WADO-RS metadata GET %s", url)
-        resp = self._session.get(
-            url,
-            headers={"Accept": "application/dicom+json"},
-            timeout=self.timeout,
-        )
-        if resp.status_code == 204:
+        resp = self._get(url, extra_headers={"Accept": "application/dicom+json"})
+        if resp.status == 204:
             return []
-        resp.raise_for_status()
-        if not resp.content:
+        body = resp.read()
+        if not body:
             return []
-        return resp.json()
+        return json.loads(body)
 
     def probe_endpoint(self, path: str, accept: str | None = None) -> dict:
         """
@@ -291,16 +294,23 @@ class DICOMwebClient:
             latency_ms (int), error (str|None).
         """
         url = f"{self.base_url}{path}"
-        headers = {}
-        if accept:
-            headers["Accept"] = accept
+        extra_headers = {"Accept": accept} if accept else None
         t0 = time.monotonic()
         try:
-            resp = self._session.get(url, headers=headers or None, timeout=self.timeout)
+            resp = self._get(url, extra_headers=extra_headers)
             latency_ms = int((time.monotonic() - t0) * 1000)
             return {
-                "status_code": resp.status_code,
+                "status_code": resp.status,
                 "content_type": resp.headers.get("Content-Type", ""),
+                "latency_ms": latency_ms,
+                "error": None,
+            }
+        except urllib.error.HTTPError as exc:
+            # HTTP error responses (4xx/5xx) are valid probe results, not failures
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            return {
+                "status_code": exc.code,
+                "content_type": exc.headers.get("Content-Type", ""),
                 "latency_ms": latency_ms,
                 "error": None,
             }
@@ -351,6 +361,6 @@ def _parse_boundary(content_type: str) -> str | None:
     for segment in content_type.split(";"):
         segment = segment.strip()
         if segment.lower().startswith("boundary="):
-            boundary = segment[len("boundary=") :].strip().strip('"')
+            boundary = segment[len("boundary="):].strip().strip('"')
             return boundary
     return None
