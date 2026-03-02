@@ -1368,17 +1368,18 @@ def register_lakeflow_source(spark):
                             ext = ".jpg"
                         else:
                             raise
-
-                import os as _os
-                dest_path_str = _os.path.join(volume_path, study_uid, series_uid, f"{sop_uid}{ext}")
-                _os.makedirs(_os.path.dirname(dest_path_str), exist_ok=True)
-                with open(dest_path_str, "wb") as _f:
-                    _f.write(file_bytes)
-                record["dicom_file_path"] = dest_path_str
-                logger.debug("Wrote %d bytes → %s", len(file_bytes), dest_path_str)
             except Exception as exc:
                 logger.error("WADO-RS retrieval failed for %s: %s", sop_uid, exc)
                 record["dicom_file_path"] = None
+                return record
+
+            import os as _os
+            dest_path_str = _os.path.join(volume_path, study_uid, series_uid, f"{sop_uid}{ext}")
+            _os.makedirs(_os.path.dirname(dest_path_str), exist_ok=True)
+            with open(dest_path_str, "wb") as _f:
+                _f.write(file_bytes)
+            record["dicom_file_path"] = dest_path_str
+            logger.debug("Wrote %d bytes → %s", len(file_bytes), dest_path_str)
 
             return record
 
