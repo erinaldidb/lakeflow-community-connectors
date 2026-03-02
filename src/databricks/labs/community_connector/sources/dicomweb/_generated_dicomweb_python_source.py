@@ -1697,7 +1697,7 @@ def register_lakeflow_source(spark):
                     current_start = next_offset
 
                 batch_size = int(self.options.get("dicom_batch_size", "50"))
-                options_json = json.dumps(self.options)
+                options_json = json.dumps(dict(self.options))
                 partitions_list = []
                 for i in range(0, max(1, len(all_records)), batch_size):
                     partitions_list.append(DicomBatchPartition(
