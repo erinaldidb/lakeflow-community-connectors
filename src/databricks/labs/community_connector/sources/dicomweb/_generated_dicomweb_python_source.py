@@ -1675,13 +1675,18 @@ def register_lakeflow_source(spark):
             table_options = {k: v for k, v in self.options.items() if k != IS_DELETE_FLOW}
             table_name = self.options.get(TABLE_NAME)
             fetch_files = table_options.get("fetch_dicom_files", "false").lower() == "true"
+            fetch_metadata = table_options.get("fetch_metadata", "false").lower() == "true"
             volume_path = table_options.get("dicom_volume_path", "")
 
-            if not is_delete_flow and table_name == "instances" and fetch_files and volume_path:
-                # Driver-side: collect all instance metadata (no file downloads), then
-                # distribute file downloads to executors via DicomBatchPartitions.
+            if not is_delete_flow and table_name == "instances" and (fetch_files or fetch_metadata):
+                if fetch_files and not volume_path:
+                    raise ValueError("fetch_dicom_files=true requires dicom_volume_path to be set")
+                # Driver-side: collect bare instance records only (no metadata, no file
+                # downloads). Both are deferred to executor-side _read_dicom_batch() so
+                # that WADO-RS network traffic is distributed across executors.
                 meta_options = dict(table_options)
                 meta_options["fetch_dicom_files"] = "false"
+                meta_options["fetch_metadata"] = "false"
                 all_records = []
                 current_start = dict(start) if start else {}
                 while True:
@@ -1716,17 +1721,34 @@ def register_lakeflow_source(spark):
                 return self._read_simple(partition)
 
         def _read_dicom_batch(self, partition):
-            """Executor-side: download DICOM files and write to UC Volume (FUSE accessible)."""
+            """Executor-side: fetch metadata and/or download DICOM files (FUSE accessible)."""
             instances = json.loads(partition.instances_json)
             options = json.loads(partition.options_json)
             table_options = {k: v for k, v in options.items() if k != IS_DELETE_FLOW}
             volume_path = table_options.get("dicom_volume_path", "")
             wado_mode = table_options.get("wado_mode", "auto")
+            fetch_metadata = table_options.get("fetch_metadata", "false").lower() == "true"
+            fetch_files = table_options.get("fetch_dicom_files", "false").lower() == "true"
             connector = LakeflowConnectImpl(options)
+
+            if fetch_metadata:
+                # One WADO-RS metadata request per unique series in this batch.
+                sop_to_meta: dict = {}
+                seen_series: set = set()
+                for rec in instances:
+                    key = (rec.get("study_instance_uid"), rec.get("series_instance_uid"))
+                    if key not in seen_series and all(key):
+                        seen_series.add(key)
+                        sop_to_meta.update(connector._build_metadata_map(key[0], key[1]))
+                for rec in instances:
+                    sop_uid = rec.get("sop_instance_uid")
+                    rec["metadata"] = sop_to_meta.get(sop_uid) if sop_uid else None
+
             results = []
-            for record in instances:
-                record = connector._attach_dicom_file(record, volume_path, wado_mode)
-                results.append(parse_value(record, self.schema))
+            for rec in instances:
+                if fetch_files:
+                    rec = connector._attach_dicom_file(rec, volume_path, wado_mode)
+                results.append(parse_value(rec, self.schema))
             return iter(results)
 
         def _read_simple(self, partition):
