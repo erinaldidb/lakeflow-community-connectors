@@ -54,7 +54,7 @@ This connector supports the following table-specific options via `externalOption
 **Commercial VNA/PACS (Sectra, Agfa, Philips, etc.):**
 1. Contact your PACS administrator for the DICOMweb (QIDO-RS/WADO-RS) endpoint URL.
 2. Request a service account with read-only access to studies, series, and instances.
-3. Confirm that the endpoint supports `StudyDate` as a QIDO-RS filter parameter.
+3. Confirm that the endpoint supports `study_date` as a QIDO-RS filter parameter.
 
 ### Create a Unity Catalog Connection
 
@@ -100,12 +100,12 @@ The DICOMweb connector exposes a **static list** of four tables corresponding to
 
 | Table | Description | Ingestion Type | Primary Key | Cursor Field |
 |-------|-------------|----------------|-------------|--------------|
-| `studies` | Study-level metadata. One row per DICOM study (patient imaging encounter). | `cdc` | `StudyInstanceUID` | `StudyDate` |
-| `series` | Series-level metadata. One row per image series within a study. | `cdc` | `SeriesInstanceUID` | `StudyDate` |
-| `instances` | Instance (SOP) metadata. One row per individual DICOM file. | `cdc` | `SOPInstanceUID` | `StudyDate` |
+| `studies` | Study-level metadata. One row per DICOM study (patient imaging encounter). | `cdc` | `study_instance_uid` | `study_date` |
+| `series` | Series-level metadata. One row per image series within a study. | `cdc` | `series_instance_uid` | `study_date` |
+| `instances` | Instance (SOP) metadata. One row per individual DICOM file. | `cdc` | `sop_instance_uid` | `study_date` |
 | `diagnostics` | Capability probe results. One row per tested DICOMweb endpoint. | `cdc` | `endpoint` | `probe_timestamp` |
 
-**Incremental sync strategy:** The `studies`, `series`, and `instances` tables use a `StudyDate`-based cursor. On each pipeline run, the connector queries for studies within a date range starting from the last known cursor (minus `lookback_days` for late-arriving records) through today. The `diagnostics` table re-probes all endpoints on every trigger.
+**Incremental sync strategy:** The `studies`, `series`, and `instances` tables use a `study_date`-based cursor. On each pipeline run, the connector queries for studies within a date range starting from the last known cursor (minus `lookback_days` for late-arriving records) through today. The `diagnostics` table re-probes all endpoints on every trigger.
 
 **Delete handling:** DICOMweb (QIDO-RS) does not provide a delete-notification mechanism. Deleted studies, series, or instances will remain in the Delta table unless removed by a separate out-of-band process. The connector performs upserts (CDC) only.
 
@@ -113,56 +113,56 @@ The DICOMweb connector exposes a **static list** of four tables corresponding to
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `StudyInstanceUID` | STRING (PK) | Globally unique study identifier |
-| `PatientID` | STRING | Patient identifier in the PACS |
-| `PatientName` | STRING | Patient name (Alphabetic component) |
-| `StudyDate` | STRING | Study date in `YYYYMMDD` format (cursor field) |
-| `StudyTime` | STRING | Study time in `HHMMSS.ffffff` format |
-| `AccessionNumber` | STRING | Accession number assigned by radiology |
-| `StudyDescription` | STRING | Free-text description of the study |
-| `ModalitiesInStudy` | ARRAY\<STRING\> | Modalities present in the study (e.g., `["CT", "SR"]`) |
-| `NumberOfStudyRelatedSeries` | BIGINT | Number of series in this study |
-| `NumberOfStudyRelatedInstances` | BIGINT | Total number of DICOM instances in this study |
+| `study_instance_uid` | STRING (PK) | Globally unique study identifier |
+| `patient_id` | STRING | Patient identifier in the PACS |
+| `patient_name` | STRING | Patient name (Alphabetic component) |
+| `study_date` | STRING | Study date in `YYYYMMDD` format (cursor field) |
+| `study_time` | STRING | Study time in `HHMMSS.ffffff` format |
+| `accession_number` | STRING | Accession number assigned by radiology |
+| `study_description` | STRING | Free-text description of the study |
+| `modalities_in_study` | ARRAY\<STRING\> | Modalities present in the study (e.g., `["CT", "SR"]`) |
+| `number_of_study_related_series` | BIGINT | Number of series in this study |
+| `number_of_study_related_instances` | BIGINT | Total number of DICOM instances in this study |
 | `connection_name` | STRING | Lineage identifier (defaults to `base_url`) |
 
 ### `series` schema
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `SeriesInstanceUID` | STRING (PK) | Globally unique series identifier |
-| `StudyInstanceUID` | STRING | Parent study UID |
-| `StudyDate` | STRING | Study date in `YYYYMMDD` format (cursor field) |
-| `SeriesNumber` | BIGINT | Series number within the study |
-| `SeriesDescription` | STRING | Free-text description of the series |
-| `Modality` | STRING | Imaging modality (CT, MR, US, CR, DX, etc.) |
-| `BodyPartExamined` | STRING | Body part examined (CHEST, HEAD, etc.) |
-| `SeriesDate` | STRING | Series acquisition date in `YYYYMMDD` format |
+| `series_instance_uid` | STRING (PK) | Globally unique series identifier |
+| `study_instance_uid` | STRING | Parent study UID |
+| `study_date` | STRING | Study date in `YYYYMMDD` format (cursor field) |
+| `series_number` | BIGINT | Series number within the study |
+| `series_description` | STRING | Free-text description of the series |
+| `modality` | STRING | Imaging modality (CT, MR, US, CR, DX, etc.) |
+| `body_part_examined` | STRING | Body part examined (CHEST, HEAD, etc.) |
+| `series_date` | STRING | Series acquisition date in `YYYYMMDD` format |
 | `connection_name` | STRING | Lineage identifier (defaults to `base_url`) |
 
 ### `instances` schema
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `SOPInstanceUID` | STRING (PK) | Globally unique SOP instance identifier |
-| `SeriesInstanceUID` | STRING | Parent series UID |
-| `StudyInstanceUID` | STRING | Parent study UID |
-| `SOPClassUID` | STRING | SOP Class UID (identifies DICOM IOD type, e.g., CT Image Storage) |
-| `InstanceNumber` | BIGINT | Instance number within the series |
-| `StudyDate` | STRING | Study date in `YYYYMMDD` format (cursor field) |
-| `ContentDate` | STRING | Content creation date in `YYYYMMDD` format |
-| `ContentTime` | STRING | Content creation time in `HHMMSS.ffffff` format |
+| `sop_instance_uid` | STRING (PK) | Globally unique SOP instance identifier |
+| `series_instance_uid` | STRING | Parent series UID |
+| `study_instance_uid` | STRING | Parent study UID |
+| `sop_class_uid` | STRING | SOP Class UID (identifies DICOM IOD type, e.g., CT Image Storage) |
+| `instance_number` | BIGINT | Instance number within the series |
+| `study_date` | STRING | Study date in `YYYYMMDD` format (cursor field) |
+| `content_date` | STRING | Content creation date in `YYYYMMDD` format |
+| `content_time` | STRING | Content creation time in `HHMMSS.ffffff` format |
 | `dicom_file_path` | STRING | Path to `.dcm` or `.jpg` file in a Unity Catalog Volume (populated when `fetch_dicom_files` is enabled) |
 | `metadata` | VARIANT | Full DICOM JSON for this instance (populated when `fetch_metadata` is enabled) |
 | `connection_name` | STRING | Lineage identifier (defaults to `base_url`) |
 
 **Special columns:**
 
-- `dicom_file_path`: Populated only when the `fetch_dicom_files` table option is set to `true`. Files are written to the path specified by `dicom_volume_path`, organized as `{volume_path}/{StudyInstanceUID}/{SeriesInstanceUID}/{SOPInstanceUID}.dcm` (or `.jpg` for frame-based retrieval). If the download fails for a given instance, this field is set to `NULL` and the pipeline continues without interruption.
+- `dicom_file_path`: Populated only when the `fetch_dicom_files` table option is set to `true`. Files are written to the path specified by `dicom_volume_path`, organized as `{volume_path}/{study_instance_uid}/{series_instance_uid}/{sop_instance_uid}.dcm` (or `.jpg` for frame-based retrieval). If the download fails for a given instance, this field is set to `NULL` and the pipeline continues without interruption.
 
 - `metadata`: Populated only when the `fetch_metadata` table option is set to `true`. Contains the complete DICOM JSON tag set for the instance as a VARIANT type. You can query individual DICOM tags using Databricks' semi-structured data access syntax:
   ```sql
   -- Extract the Modality tag from full metadata
-  SELECT SOPInstanceUID, metadata:00080060.Value[0] AS Modality FROM instances;
+  SELECT sop_instance_uid, metadata:00080060.Value[0] AS modality FROM instances;
 
   -- Filter for all CT instances
   SELECT * FROM instances WHERE metadata:00080060.Value[0] = 'CT';
@@ -234,14 +234,14 @@ The connector maps DICOM Value Representations (VR) to Databricks types as follo
 | `LO` | Long String | STRING | Max 64 characters |
 | `SH` | Short String | STRING | Max 16 characters |
 | `PN` | Person Name | STRING | Alphabetic component extracted from the DICOM JSON PersonName object |
-| `CS` | Code String | STRING or ARRAY\<STRING\> | Single-valued CS fields are stored as STRING. Multi-valued CS fields (e.g., `ModalitiesInStudy`) are stored as ARRAY\<STRING\>. |
+| `CS` | Code String | STRING or ARRAY\<STRING\> | Single-valued CS fields are stored as STRING. Multi-valued CS fields (e.g., `modalities_in_study`) are stored as ARRAY\<STRING\>. |
 | `IS` | Integer String | BIGINT | Parsed from string representation |
 | `DS` | Decimal String | STRING | Stored as string to preserve precision |
 | `SQ` | Sequence of Items | VARIANT | Complex nested sequences are available in the `metadata` column when `fetch_metadata` is enabled |
 | `OB`/`OW` | Binary Data | -- | Pixel data is not included in metadata tables. Use `fetch_dicom_files` to download binary content separately. |
 
 **Important notes:**
-- All date/time fields are stored as raw DICOM strings (`YYYYMMDD`, `HHMMSS.ffffff`). Convert in SQL with `to_date(StudyDate, 'yyyyMMdd')` as needed.
+- All date/time fields are stored as raw DICOM strings (`YYYYMMDD`, `HHMMSS.ffffff`). Convert in SQL with `to_date(study_date, 'yyyyMMdd')` as needed.
 - Person names follow the DICOM convention `FamilyName^GivenName^MiddleName^NamePrefix^NameSuffix`. Only the Alphabetic component is extracted.
 - Tags absent from the QIDO-RS response are stored as `NULL`.
 
@@ -323,10 +323,10 @@ Example configuration ingesting all four tables:
 
 - **Start small**: Begin by syncing only `studies` to verify connectivity and data volume before enabling `series` and `instances`.
 - **Set a realistic initial date range**: On the first run, the connector defaults to scanning all history (from `19000101`). For large PACS systems with millions of instances, this can be very slow. Limit the initial scan by setting an appropriate `lookback_days` or running with a recent date range.
-- **Use incremental sync**: After the initial load, the connector uses `StudyDate`-based cursors to fetch only new or recently modified records on each run. The `lookback_days` setting provides overlap to catch late-arriving or backdated studies.
+- **Use incremental sync**: After the initial load, the connector uses `study_date`-based cursors to fetch only new or recently modified records on each run. The `lookback_days` setting provides overlap to catch late-arriving or backdated studies.
 - **Tune `page_size`**: The default of `100` works well for most servers. For large PACS systems, increasing to `500` or `1000` can reduce the total number of API calls. Reduce `page_size` if the server times out on large result sets.
 - **Enable file retrieval selectively**: The `fetch_dicom_files` option issues one additional WADO-RS request per instance and should be enabled only when raw DICOM files are needed (e.g., for AI/ML image analysis pipelines). Each `.dcm` file can range from a few KB (text reports) to several hundred MB (CT/MR volumes).
-- **Monitor Volume storage**: When using `fetch_dicom_files`, plan Unity Catalog Volume capacity based on the expected data volume. Files are organized by `{StudyUID}/{SeriesUID}/{SOPInstanceUID}.dcm`.
+- **Monitor Volume storage**: When using `fetch_dicom_files`, plan Unity Catalog Volume capacity based on the expected data volume. Files are organized by `{study_instance_uid}/{series_instance_uid}/{sop_instance_uid}.dcm`.
 - **Schedule appropriately**: For near-real-time analytics, run every 15-30 minutes. For batch loads, a daily schedule is sufficient. Be aware that cloud-hosted DICOMweb endpoints (Azure, GCP) issue tokens that typically expire after 1 hour -- for long-running initial loads, token refresh must be handled externally.
 
 #### Troubleshooting
@@ -335,7 +335,7 @@ Example configuration ingesting all four tables:
 
 - **Empty QIDO-RS results (no records returned)**:
   - Verify the `base_url` includes the correct path prefix (e.g., `/dicom-web`, `/wado`, `/rs`).
-  - Confirm the endpoint supports the `StudyDate` QIDO-RS filter parameter.
+  - Confirm the endpoint supports the `study_date` QIDO-RS filter parameter.
   - Try accessing `{base_url}/studies` directly in a browser or with `curl` to verify connectivity.
 
 - **Authentication errors (HTTP 401 / 403)**:
