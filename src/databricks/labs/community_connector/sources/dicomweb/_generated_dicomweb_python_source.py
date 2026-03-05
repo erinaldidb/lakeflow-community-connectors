@@ -18,7 +18,6 @@ from typing import Any, Iterator
 import json
 import time
 
-from __future__ import annotations
 from pyspark.sql import Row
 from pyspark.sql.datasource import (
     DataSource,

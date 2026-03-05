@@ -6,9 +6,6 @@ Supports three authentication modes:
     basic   – HTTP Basic Auth (username + password)
     bearer  – Authorization: Bearer <token>
 """
-
-from __future__ import annotations
-
 import base64
 import json
 import logging

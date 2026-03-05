@@ -11,8 +11,6 @@ This module maps those tags to human-readable field names and extracts values
 with awareness of DICOM Value Representations (VR).
 """
 
-from __future__ import annotations
-
 # ---------------------------------------------------------------------------
 # Tag maps
 # ---------------------------------------------------------------------------

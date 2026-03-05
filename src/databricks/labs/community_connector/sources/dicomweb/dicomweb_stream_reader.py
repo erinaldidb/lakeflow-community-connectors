@@ -14,8 +14,6 @@ metadata, then batches instances into DicomBatchPartitions.  Each
 read(DicomBatchPartition) call runs on a Spark executor that has UC Volume FUSE
 access, downloads the DICOM files, and writes them to the volume.
 """
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import date
 from typing import Iterator
