@@ -6,6 +6,7 @@ Supports three authentication modes:
     basic   – HTTP Basic Auth (username + password)
     bearer  – Authorization: Bearer <token>
 """
+
 import base64
 import json
 import logging
@@ -161,7 +162,9 @@ class DICOMwebClient:
         """
         url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}"
         logger.debug("WADO-RS GET %s", url)
-        resp = self._get(url, extra_headers={"Accept": 'multipart/related; type="application/dicom"'})
+        resp = self._get(
+            url, extra_headers={"Accept": 'multipart/related; type="application/dicom"'}
+        )
         content_type = resp.headers.get("Content-Type", "")
         body = resp.read()
         if "multipart/related" in content_type:
@@ -195,7 +198,9 @@ class DICOMwebClient:
         """
         url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}/frames/{frame_number}"
         logger.debug("WADO-RS frames GET %s", url)
-        resp = self._get(url, extra_headers={"Accept": "image/jpeg, image/png, application/octet-stream"})
+        resp = self._get(
+            url, extra_headers={"Accept": "image/jpeg, image/png, application/octet-stream"}
+        )
         content_type = resp.headers.get("Content-Type", "")
         body = resp.read()
         if "multipart/related" in content_type:
@@ -227,7 +232,9 @@ class DICOMwebClient:
             Single full DICOM JSON object (dict keyed by 8-char hex tag strings).
             Returns an empty dict if the server returns 204 or an empty body.
         """
-        url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}/metadata"
+        url = (
+            f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}/metadata"
+        )
         logger.debug("WADO-RS instance metadata GET %s", url)
         resp = self._get(url, extra_headers={"Accept": "application/dicom+json"})
         if resp.status == 204:
@@ -358,6 +365,6 @@ def _parse_boundary(content_type: str) -> str | None:
     for segment in content_type.split(";"):
         segment = segment.strip()
         if segment.lower().startswith("boundary="):
-            boundary = segment[len("boundary="):].strip().strip('"')
+            boundary = segment[len("boundary=") :].strip().strip('"')
             return boundary
     return None

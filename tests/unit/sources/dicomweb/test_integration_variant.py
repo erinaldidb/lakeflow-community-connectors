@@ -102,7 +102,9 @@ def spark():
 @pytest.fixture(scope="module")
 def orthanc_connector():
     """DICOMwebLakeflowConnect pointed at the public Orthanc demo."""
-    from databricks.labs.community_connector.sources.dicomweb.dicomweb import DICOMwebLakeflowConnect
+    from databricks.labs.community_connector.sources.dicomweb.dicomweb import (
+        DICOMwebLakeflowConnect,
+    )
 
     return DICOMwebLakeflowConnect({"base_url": ORTHANC_BASE_URL, "auth_type": "none"})
 
@@ -136,7 +138,9 @@ class TestOrthanc:
 
     def test_reads_instances_with_metadata(self, orthanc_connector):
         """fetch_metadata=true populates the metadata column as a JSON string in the raw dict."""
-        records_iter, _ = orthanc_connector.read_table("instances", {}, {"page_size": "5", "fetch_metadata": "true"})
+        records_iter, _ = orthanc_connector.read_table(
+            "instances", {}, {"page_size": "5", "fetch_metadata": "true"}
+        )
         records = list(records_iter)
         assert len(records) > 0
 
@@ -180,8 +184,13 @@ class TestVariantValConversion:
             ]
         )
         data = [
-            Row(id="1", metadata=VariantVal.parseJson('{"00080018": {"vr": "UI", "Value": ["1.2.3"]}}')),
-            Row(id="2", metadata=VariantVal.parseJson('{"00080060": {"vr": "CS", "Value": ["CT"]}}')),
+            Row(
+                id="1",
+                metadata=VariantVal.parseJson('{"00080018": {"vr": "UI", "Value": ["1.2.3"]}}'),
+            ),
+            Row(
+                id="2", metadata=VariantVal.parseJson('{"00080060": {"vr": "CS", "Value": ["CT"]}}')
+            ),
             Row(id="3", metadata=None),
         ]
         df = spark.createDataFrame(data, schema)
@@ -204,11 +213,21 @@ class TestVariantValConversion:
             ]
         )
         df = spark.createDataFrame(
-            [Row(sop_instance_uid="1.2.3", metadata=VariantVal.parseJson('{"tag": "val"}'), connection_name="my-conn")],
+            [
+                Row(
+                    sop_instance_uid="1.2.3",
+                    metadata=VariantVal.parseJson('{"tag": "val"}'),
+                    connection_name="my-conn",
+                )
+            ],
             schema,
         )
 
-        assert [f.name for f in df.schema.fields] == ["sop_instance_uid", "metadata", "connection_name"]
+        assert [f.name for f in df.schema.fields] == [
+            "sop_instance_uid",
+            "metadata",
+            "connection_name",
+        ]
 
         sop_field = next(f for f in df.schema.fields if f.name == "sop_instance_uid")
         conn_field = next(f for f in df.schema.fields if f.name == "connection_name")
@@ -280,9 +299,13 @@ class TestEndToEndVariantPipeline:
         """After VariantVal.parseJson() conversion, metadata DataFrame has VariantType."""
         from pyspark.sql.types import VariantType
 
-        from databricks.labs.community_connector.sources.dicomweb.dicomweb_schemas import INSTANCES_SCHEMA
+        from databricks.labs.community_connector.sources.dicomweb.dicomweb_schemas import (
+            INSTANCES_SCHEMA,
+        )
 
-        records_iter, _ = orthanc_connector.read_table("instances", {}, {"page_size": "5", "fetch_metadata": "true"})
+        records_iter, _ = orthanc_connector.read_table(
+            "instances", {}, {"page_size": "5", "fetch_metadata": "true"}
+        )
         records = list(records_iter)
         assert len(records) > 0
 
@@ -301,9 +324,13 @@ class TestEndToEndVariantPipeline:
         """
         from pyspark.sql.types import VariantType
 
-        from databricks.labs.community_connector.sources.dicomweb.dicomweb_schemas import INSTANCES_SCHEMA
+        from databricks.labs.community_connector.sources.dicomweb.dicomweb_schemas import (
+            INSTANCES_SCHEMA,
+        )
 
-        records_iter, _ = orthanc_connector.read_table("instances", {}, {"page_size": "5", "fetch_metadata": "true"})
+        records_iter, _ = orthanc_connector.read_table(
+            "instances", {}, {"page_size": "5", "fetch_metadata": "true"}
+        )
         records = list(records_iter)
         assert len(records) > 0
         assert any(r.get("metadata") is not None for r in records), (

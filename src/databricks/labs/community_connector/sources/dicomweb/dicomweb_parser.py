@@ -53,7 +53,23 @@ INSTANCE_TAG_MAP: dict[str, str] = {
 # VRs that carry a single string scalar (or list → join / first element)
 _STRING_VRS = {"DA", "TM", "CS", "LO", "UI", "SH", "LT", "ST", "UT", "AE", "AS", "DT", "UC", "UR"}
 # VRs that carry numeric values
-_NUMERIC_VRS = {"IS", "DS", "FL", "FD", "SL", "SS", "UL", "US", "AT", "OB", "OW", "OF", "OD", "OL", "OV"}
+_NUMERIC_VRS = {
+    "IS",
+    "DS",
+    "FL",
+    "FD",
+    "SL",
+    "SS",
+    "UL",
+    "US",
+    "AT",
+    "OB",
+    "OW",
+    "OF",
+    "OD",
+    "OL",
+    "OV",
+}
 # Multi-valued string VRs (arrays stay as lists)
 _MULTI_STRING_VRS = {"CS"}  # modalities_in_study uses CS and can be multi-valued
 

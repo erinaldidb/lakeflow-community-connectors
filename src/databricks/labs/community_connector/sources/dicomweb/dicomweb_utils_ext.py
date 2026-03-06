@@ -6,6 +6,7 @@ redefined parse_value shadows the original and adds handling for VariantType.
 The helper functions (_parse_struct, _parse_array, _parse_map, _PRIMITIVE_PARSERS)
 defined in the utils.py section are still in scope.
 """
+
 from typing import Any
 
 from pyspark.sql.types import (

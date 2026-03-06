@@ -89,9 +89,7 @@ def test_auth_read_studies():
 
     # Every record must carry a study_instance_uid (the primary key)
     for rec in records:
-        assert rec.get("study_instance_uid"), (
-            f"Record is missing study_instance_uid: {rec}"
-        )
+        assert rec.get("study_instance_uid"), f"Record is missing study_instance_uid: {rec}"
 
     # next_offset must be a dict with at least a study_date key
     assert isinstance(next_offset, dict), f"Expected dict next_offset, got {type(next_offset)}"

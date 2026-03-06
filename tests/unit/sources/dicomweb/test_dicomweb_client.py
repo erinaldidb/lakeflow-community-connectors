@@ -28,7 +28,9 @@ def _load(name: str) -> list[dict]:
 class MockResponse:
     """Minimal mock of http.client.HTTPResponse."""
 
-    def __init__(self, body: bytes, status: int = 200, content_type: str = "application/dicom+json"):
+    def __init__(
+        self, body: bytes, status: int = 200, content_type: str = "application/dicom+json"
+    ):
         self.status = status
         self._body = body
         self.headers = {"Content-Type": content_type}
@@ -103,7 +105,9 @@ class TestQIDORS:
             client = DICOMwebClient(BASE_URL)
             result = client.query_studies("20231215-20231216", limit=100, offset=0)
         assert len(result) == 2
-        assert result[0]["0020000D"]["Value"][0] == "1.2.840.113619.2.5.1762583153.215519.978957063.78"
+        assert (
+            result[0]["0020000D"]["Value"][0] == "1.2.840.113619.2.5.1762583153.215519.978957063.78"
+        )
 
     def test_query_studies_passes_params(self):
         captured = {}
@@ -170,7 +174,10 @@ FAKE_DCM = b"DICM" + b"\x00" * 128  # minimal fake DICOM preamble
 
 class TestWADORS:
     def test_retrieve_instance_raw(self):
-        with patch("urllib.request.urlopen", return_value=MockResponse(FAKE_DCM, content_type="application/dicom")):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=MockResponse(FAKE_DCM, content_type="application/dicom"),
+        ):
             client = DICOMwebClient(BASE_URL)
             result = client.retrieve_instance("1.2.3", "1.2.3.4", "1.2.3.4.5")
         assert result == FAKE_DCM
@@ -196,7 +203,10 @@ class TestWADORS:
 
     def test_retrieve_instance_frames(self):
         fake_frame = b"\xff\xd8\xff\xe0JFIF"
-        with patch("urllib.request.urlopen", return_value=MockResponse(fake_frame, content_type="image/jpeg")):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=MockResponse(fake_frame, content_type="image/jpeg"),
+        ):
             client = DICOMwebClient(BASE_URL)
             result = client.retrieve_instance_frames("1.2.3", "1.2.3.4", "1.2.3.4.5")
         assert result == fake_frame

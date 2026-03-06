@@ -251,9 +251,7 @@ def register_lakeflow_source(spark):
             """
 
         @abstractmethod
-        def get_table_schema(
-            self, table_name: str, table_options: dict[str, str]
-        ) -> StructType:
+        def get_table_schema(self, table_name: str, table_options: dict[str, str]) -> StructType:
             """
             Fetch the schema of a table.
             Args:
@@ -269,9 +267,7 @@ def register_lakeflow_source(spark):
             """
 
         @abstractmethod
-        def read_table_metadata(
-            self, table_name: str, table_options: dict[str, str]
-        ) -> dict:
+        def read_table_metadata(self, table_name: str, table_options: dict[str, str]) -> dict:
             """
             Fetch the metadata of a table.
             Args:
@@ -517,7 +513,9 @@ def register_lakeflow_source(spark):
             """
             url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}"
             logger.debug("WADO-RS GET %s", url)
-            resp = self._get(url, extra_headers={"Accept": 'multipart/related; type="application/dicom"'})
+            resp = self._get(
+                url, extra_headers={"Accept": 'multipart/related; type="application/dicom"'}
+            )
             content_type = resp.headers.get("Content-Type", "")
             body = resp.read()
             if "multipart/related" in content_type:
@@ -551,7 +549,9 @@ def register_lakeflow_source(spark):
             """
             url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}/frames/{frame_number}"
             logger.debug("WADO-RS frames GET %s", url)
-            resp = self._get(url, extra_headers={"Accept": "image/jpeg, image/png, application/octet-stream"})
+            resp = self._get(
+                url, extra_headers={"Accept": "image/jpeg, image/png, application/octet-stream"}
+            )
             content_type = resp.headers.get("Content-Type", "")
             body = resp.read()
             if "multipart/related" in content_type:
@@ -583,7 +583,9 @@ def register_lakeflow_source(spark):
                 Single full DICOM JSON object (dict keyed by 8-char hex tag strings).
                 Returns an empty dict if the server returns 204 or an empty body.
             """
-            url = f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}/metadata"
+            url = (
+                f"{self.base_url}/studies/{study_uid}/series/{series_uid}/instances/{sop_uid}/metadata"
+            )
             logger.debug("WADO-RS instance metadata GET %s", url)
             resp = self._get(url, extra_headers={"Accept": "application/dicom+json"})
             if resp.status == 204:
@@ -714,7 +716,7 @@ def register_lakeflow_source(spark):
         for segment in content_type.split(";"):
             segment = segment.strip()
             if segment.lower().startswith("boundary="):
-                boundary = segment[len("boundary="):].strip().strip('"')
+                boundary = segment[len("boundary=") :].strip().strip('"')
                 return boundary
         return None
 
@@ -726,12 +728,14 @@ def register_lakeflow_source(spark):
     @dataclass
     class SimplePartition(InputPartition):
         """Single partition carrying the serialised start-offset."""
+
         start_json: str
 
 
     @dataclass
     class DicomBatchPartition(InputPartition):
         """Batch of instance records to process on an executor."""
+
         instances_json: str
         options_json: str
 
@@ -739,6 +743,7 @@ def register_lakeflow_source(spark):
     # ---------------------------------------------------------------------------
     # DataSourceStreamReader — runs read() on executors
     # ---------------------------------------------------------------------------
+
 
     class DicomStreamReader(DataSourceStreamReader):
         """Executor-distributed streaming reader for DICOMweb.
@@ -793,7 +798,9 @@ def register_lakeflow_source(spark):
             current_start = dict(start) if start else {}
             while True:
                 records, next_offset = self._lakeflow_connect.read_table(
-                    table_name, current_start, meta_options,
+                    table_name,
+                    current_start,
+                    meta_options,
                 )
                 batch = list(records)
                 all_records.extend(batch)
@@ -807,7 +814,7 @@ def register_lakeflow_source(spark):
             options_json = json.dumps(dict(self.options))
             return [
                 DicomBatchPartition(
-                    instances_json=json.dumps(all_records[i:i + batch_size], default=str),
+                    instances_json=json.dumps(all_records[i : i + batch_size], default=str),
                     options_json=options_json,
                 )
                 for i in range(0, max(1, len(all_records)), batch_size)
@@ -881,11 +888,14 @@ def register_lakeflow_source(spark):
     # ends up in the pickle stream.
     # ---------------------------------------------------------------------------
 
+
     @classmethod
     def _dicom_init_subclass(cls, **kwargs):
         def _stream_reader(self, schema):
             return DicomStreamReader(self.options, schema, self.lakeflow_connect)
+
         cls.streamReader = _stream_reader
+
 
     DataSource.__init_subclass__ = _dicom_init_subclass
 
@@ -932,7 +942,23 @@ def register_lakeflow_source(spark):
     # VRs that carry a single string scalar (or list → join / first element)
     _STRING_VRS = {"DA", "TM", "CS", "LO", "UI", "SH", "LT", "ST", "UT", "AE", "AS", "DT", "UC", "UR"}
     # VRs that carry numeric values
-    _NUMERIC_VRS = {"IS", "DS", "FL", "FD", "SL", "SS", "UL", "US", "AT", "OB", "OW", "OF", "OD", "OL", "OV"}
+    _NUMERIC_VRS = {
+        "IS",
+        "DS",
+        "FL",
+        "FD",
+        "SL",
+        "SS",
+        "UL",
+        "US",
+        "AT",
+        "OB",
+        "OW",
+        "OF",
+        "OD",
+        "OL",
+        "OV",
+    }
     # Multi-valued string VRs (arrays stay as lists)
     _MULTI_STRING_VRS = {"CS"}  # modalities_in_study uses CS and can be multi-valued
 
@@ -1302,7 +1328,9 @@ def register_lakeflow_source(spark):
                 return iter([]), start_offset
 
             page_size = int(table_options.get("page_size", DEFAULT_PAGE_SIZE))
-            max_records = int(table_options.get("max_records_per_batch", str(DEFAULT_MAX_RECORDS_PER_BATCH)))
+            max_records = int(
+                table_options.get("max_records_per_batch", str(DEFAULT_MAX_RECORDS_PER_BATCH))
+            )
             lookback_days = int(table_options.get("lookback_days", DEFAULT_LOOKBACK_DAYS))
 
             today_str = date.today().strftime("%Y%m%d")
@@ -1327,13 +1355,23 @@ def register_lakeflow_source(spark):
                 raise ValueError("fetch_dicom_files=true requires dicom_volume_path to be set")
 
             if table_name == "studies":
-                records, next_page_offset = self._collect_studies(date_range, page_size, page_offset, max_records)
+                records, next_page_offset = self._collect_studies(
+                    date_range, page_size, page_offset, max_records
+                )
             elif table_name == "series":
-                records, next_page_offset = self._collect_series(date_range, page_size, page_offset, max_records)
+                records, next_page_offset = self._collect_series(
+                    date_range, page_size, page_offset, max_records
+                )
             else:
                 records, next_page_offset = self._collect_instances(
-                    date_range, page_size, page_offset, max_records,
-                    fetch_files, volume_path, fetch_metadata, wado_mode,
+                    date_range,
+                    page_size,
+                    page_offset,
+                    max_records,
+                    fetch_files,
+                    volume_path,
+                    fetch_metadata,
+                    wado_mode,
                 )
 
             if not records:
@@ -1524,16 +1562,15 @@ def register_lakeflow_source(spark):
                             self._wado_mode_detected = WADO_MODE_FULL
                             logger.info("WADO-RS auto-detected: full DICOM retrieval")
                     except HTTPError as exc:
-                        if (
-                            wado_mode == WADO_MODE_AUTO
-                            and exc.code in (404, 406, 415)
-                        ):
+                        if wado_mode == WADO_MODE_AUTO and exc.code in (404, 406, 415):
                             logger.info(
                                 "WADO-RS full instance returned HTTP %d — auto-switching to frame retrieval",
                                 exc.code,
                             )
                             self._wado_mode_detected = WADO_MODE_FRAMES
-                            file_bytes = self._client.retrieve_instance_frames(study_uid, series_uid, sop_uid)
+                            file_bytes = self._client.retrieve_instance_frames(
+                                study_uid, series_uid, sop_uid
+                            )
                             ext = ".jpg"
                         else:
                             raise
@@ -1543,6 +1580,7 @@ def register_lakeflow_source(spark):
                 return record
 
             import os as _os
+
             dest_path_str = _os.path.join(volume_path, study_uid, series_uid, f"{sop_uid}{ext}")
             _os.makedirs(_os.path.dirname(dest_path_str), exist_ok=True)
             with open(dest_path_str, "wb") as _f:
@@ -1637,7 +1675,9 @@ def register_lakeflow_source(spark):
                 ),
                 (
                     "/studies/{uid}/series/{uid}/instances",
-                    f"/studies/{study_uid}/series/{series_uid}/instances" if study_uid and series_uid else None,
+                    f"/studies/{study_uid}/series/{series_uid}/instances"
+                    if study_uid and series_uid
+                    else None,
                     "QIDO-RS",
                     "Search instances for a series (hierarchical)",
                     None,
@@ -1645,7 +1685,9 @@ def register_lakeflow_source(spark):
                 # WADO-RS — metadata
                 (
                     "/studies/{uid}/series/{uid}/metadata",
-                    f"/studies/{study_uid}/series/{series_uid}/metadata" if study_uid and series_uid else None,
+                    f"/studies/{study_uid}/series/{series_uid}/metadata"
+                    if study_uid and series_uid
+                    else None,
                     "WADO-RS",
                     "Series metadata — full DICOM JSON for all instances in a series",
                     "application/dicom+json",
@@ -1697,7 +1739,9 @@ def register_lakeflow_source(spark):
                 ),
                 (
                     "/studies/{uid}/series/{uid}/rendered",
-                    f"/studies/{study_uid}/series/{series_uid}/rendered" if study_uid and series_uid else None,
+                    f"/studies/{study_uid}/series/{series_uid}/rendered"
+                    if study_uid and series_uid
+                    else None,
                     "WADO-RS",
                     "Retrieve rendered series (all frames as viewport-ready images)",
                     "image/jpeg, image/png",
@@ -1830,9 +1874,7 @@ def register_lakeflow_source(spark):
         def read(self, start: dict) -> (Iterator[tuple], dict):
             is_delete_flow = self.options.get(IS_DELETE_FLOW) == "true"
             # Strip delete flow options before passing to connector
-            table_options = {
-                k: v for k, v in self.options.items() if k != IS_DELETE_FLOW
-            }
+            table_options = {k: v for k, v in self.options.items() if k != IS_DELETE_FLOW}
 
             if is_delete_flow:
                 records, offset = self.lakeflow_connect.read_table_deletes(
@@ -1871,9 +1913,7 @@ def register_lakeflow_source(spark):
             if self.table_name == METADATA_TABLE:
                 all_records = self._read_table_metadata()
             else:
-                all_records, _ = self.lakeflow_connect.read_table(
-                    self.table_name, None, self.options
-                )
+                all_records, _ = self.lakeflow_connect.read_table(self.table_name, None, self.options)
 
             rows = map(lambda x: parse_value(x, self.schema), all_records)
             return iter(rows)

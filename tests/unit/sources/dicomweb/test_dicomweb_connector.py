@@ -5,7 +5,7 @@ HTTP calls are mocked via unittest.mock.patch.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -21,7 +21,6 @@ from databricks.labs.community_connector.sources.dicomweb.dicomweb_parser import
 from databricks.labs.community_connector.sources.dicomweb.dicomweb_schemas import (
     DIAGNOSTICS_SCHEMA,
     INSTANCES_SCHEMA,
-    SERIES_SCHEMA,
     STUDIES_SCHEMA,
     get_schema,
 )
@@ -54,7 +53,9 @@ class TestParser:
 
     def test_parse_series(self, series_response):
         record = parse_series(series_response[0])
-        assert record["series_instance_uid"] == "1.3.12.2.1107.5.2.32.35162.2013120811373024696203156"
+        assert (
+            record["series_instance_uid"] == "1.3.12.2.1107.5.2.32.35162.2013120811373024696203156"
+        )
         assert record["modality"] == "CT"
         assert record["series_number"] == 1
         assert record["body_part_examined"] == "CHEST"
@@ -179,7 +180,9 @@ class TestConnector:
         records_iter, next_offset = connector.read_table("studies", {}, {})
         records = list(records_iter)
         assert len(records) == 2
-        assert records[0]["study_instance_uid"] == "1.2.840.113619.2.5.1762583153.215519.978957063.78"
+        assert (
+            records[0]["study_instance_uid"] == "1.2.840.113619.2.5.1762583153.215519.978957063.78"
+        )
         assert "study_date" in next_offset
         assert next_offset["page_offset"] == 0
         # connection_name defaults to base_url when not explicitly set
@@ -206,7 +209,9 @@ class TestConnector:
         """Instances now uses hierarchical: studies → series → instances."""
         connector = DICOMwebLakeflowConnect(dicomweb_options)
         connector._client.query_studies = MagicMock(side_effect=[studies_response, []])
-        connector._client.query_series_for_study = MagicMock(return_value=series_response[:1])  # 1 series per study
+        connector._client.query_series_for_study = MagicMock(
+            return_value=series_response[:1]
+        )  # 1 series per study
         connector._client.query_instances_for_series = MagicMock(return_value=instances_response)
         records_iter, _ = connector.read_table("instances", {}, {})
         records = list(records_iter)
@@ -261,7 +266,11 @@ class TestConnector:
         records_iter, _ = connector.read_table(
             "instances",
             {},
-            {"fetch_dicom_files": "true", "dicom_volume_path": str(tmp_path), "wado_mode": "frames"},
+            {
+                "fetch_dicom_files": "true",
+                "dicom_volume_path": str(tmp_path),
+                "wado_mode": "frames",
+            },
         )
         records = list(records_iter)
         assert len(records) == 3
@@ -281,7 +290,9 @@ class TestConnector:
         connector = DICOMwebLakeflowConnect(dicomweb_options)
         connector._client.query_studies = MagicMock(side_effect=[studies_response[:1], []])
         connector._client.query_series_for_study = MagicMock(return_value=series_response[:1])
-        connector._client.query_instances_for_series = MagicMock(return_value=instances_response[:1])
+        connector._client.query_instances_for_series = MagicMock(
+            return_value=instances_response[:1]
+        )
 
         # Full WADO-RS returns 404 → auto-detects frames mode
         http_error = urllib.error.HTTPError(
@@ -316,7 +327,10 @@ class TestConnector:
 
         # Build metadata response keyed by sop_instance_uid from instances fixture
         sop_uid = instances_response[0]["00080018"]["Value"][0]
-        meta_obj = {"00080018": {"vr": "UI", "Value": [sop_uid]}, "00080060": {"vr": "CS", "Value": ["CT"]}}
+        meta_obj = {
+            "00080018": {"vr": "UI", "Value": [sop_uid]},
+            "00080060": {"vr": "CS", "Value": ["CT"]},
+        }
         connector._client.retrieve_series_metadata = MagicMock(return_value=[meta_obj])
 
         records_iter, _ = connector.read_table("instances", {}, {"fetch_metadata": "true"})

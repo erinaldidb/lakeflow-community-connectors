@@ -26,6 +26,7 @@ Serialisation note
 — cloudpickle serialises it by value, avoiding any reference to the
 ``databricks.labs`` module path that is only available on the driver.
 """
+
 from dataclasses import dataclass
 from datetime import date
 import json
@@ -37,15 +38,18 @@ from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPart
 # Partition types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SimplePartition(InputPartition):
     """Single partition carrying the serialised start-offset."""
+
     start_json: str
 
 
 @dataclass
 class DicomBatchPartition(InputPartition):
     """Batch of instance records to process on an executor."""
+
     instances_json: str
     options_json: str
 
@@ -53,6 +57,7 @@ class DicomBatchPartition(InputPartition):
 # ---------------------------------------------------------------------------
 # DataSourceStreamReader — runs read() on executors
 # ---------------------------------------------------------------------------
+
 
 class DicomStreamReader(DataSourceStreamReader):
     """Executor-distributed streaming reader for DICOMweb.
@@ -107,7 +112,9 @@ class DicomStreamReader(DataSourceStreamReader):
         current_start = dict(start) if start else {}
         while True:
             records, next_offset = self._lakeflow_connect.read_table(
-                table_name, current_start, meta_options,
+                table_name,
+                current_start,
+                meta_options,
             )
             batch = list(records)
             all_records.extend(batch)
@@ -121,7 +128,7 @@ class DicomStreamReader(DataSourceStreamReader):
         options_json = json.dumps(dict(self.options))
         return [
             DicomBatchPartition(
-                instances_json=json.dumps(all_records[i:i + batch_size], default=str),
+                instances_json=json.dumps(all_records[i : i + batch_size], default=str),
                 options_json=options_json,
             )
             for i in range(0, max(1, len(all_records)), batch_size)
@@ -195,10 +202,13 @@ class DicomStreamReader(DataSourceStreamReader):
 # ends up in the pickle stream.
 # ---------------------------------------------------------------------------
 
+
 @classmethod
 def _dicom_init_subclass(cls, **kwargs):
     def _stream_reader(self, schema):
         return DicomStreamReader(self.options, schema, self.lakeflow_connect)
+
     cls.streamReader = _stream_reader
+
 
 DataSource.__init_subclass__ = _dicom_init_subclass

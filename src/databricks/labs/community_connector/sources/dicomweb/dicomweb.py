@@ -190,7 +190,9 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
             return iter([]), start_offset
 
         page_size = int(table_options.get("page_size", DEFAULT_PAGE_SIZE))
-        max_records = int(table_options.get("max_records_per_batch", str(DEFAULT_MAX_RECORDS_PER_BATCH)))
+        max_records = int(
+            table_options.get("max_records_per_batch", str(DEFAULT_MAX_RECORDS_PER_BATCH))
+        )
         lookback_days = int(table_options.get("lookback_days", DEFAULT_LOOKBACK_DAYS))
 
         today_str = date.today().strftime("%Y%m%d")
@@ -215,13 +217,23 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
             raise ValueError("fetch_dicom_files=true requires dicom_volume_path to be set")
 
         if table_name == "studies":
-            records, next_page_offset = self._collect_studies(date_range, page_size, page_offset, max_records)
+            records, next_page_offset = self._collect_studies(
+                date_range, page_size, page_offset, max_records
+            )
         elif table_name == "series":
-            records, next_page_offset = self._collect_series(date_range, page_size, page_offset, max_records)
+            records, next_page_offset = self._collect_series(
+                date_range, page_size, page_offset, max_records
+            )
         else:
             records, next_page_offset = self._collect_instances(
-                date_range, page_size, page_offset, max_records,
-                fetch_files, volume_path, fetch_metadata, wado_mode,
+                date_range,
+                page_size,
+                page_offset,
+                max_records,
+                fetch_files,
+                volume_path,
+                fetch_metadata,
+                wado_mode,
             )
 
         if not records:
@@ -412,16 +424,15 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
                         self._wado_mode_detected = WADO_MODE_FULL
                         logger.info("WADO-RS auto-detected: full DICOM retrieval")
                 except HTTPError as exc:
-                    if (
-                        wado_mode == WADO_MODE_AUTO
-                        and exc.code in (404, 406, 415)
-                    ):
+                    if wado_mode == WADO_MODE_AUTO and exc.code in (404, 406, 415):
                         logger.info(
                             "WADO-RS full instance returned HTTP %d — auto-switching to frame retrieval",
                             exc.code,
                         )
                         self._wado_mode_detected = WADO_MODE_FRAMES
-                        file_bytes = self._client.retrieve_instance_frames(study_uid, series_uid, sop_uid)
+                        file_bytes = self._client.retrieve_instance_frames(
+                            study_uid, series_uid, sop_uid
+                        )
                         ext = ".jpg"
                     else:
                         raise
@@ -431,6 +442,7 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
             return record
 
         import os as _os
+
         dest_path_str = _os.path.join(volume_path, study_uid, series_uid, f"{sop_uid}{ext}")
         _os.makedirs(_os.path.dirname(dest_path_str), exist_ok=True)
         with open(dest_path_str, "wb") as _f:
@@ -525,7 +537,9 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
             ),
             (
                 "/studies/{uid}/series/{uid}/instances",
-                f"/studies/{study_uid}/series/{series_uid}/instances" if study_uid and series_uid else None,
+                f"/studies/{study_uid}/series/{series_uid}/instances"
+                if study_uid and series_uid
+                else None,
                 "QIDO-RS",
                 "Search instances for a series (hierarchical)",
                 None,
@@ -533,7 +547,9 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
             # WADO-RS — metadata
             (
                 "/studies/{uid}/series/{uid}/metadata",
-                f"/studies/{study_uid}/series/{series_uid}/metadata" if study_uid and series_uid else None,
+                f"/studies/{study_uid}/series/{series_uid}/metadata"
+                if study_uid and series_uid
+                else None,
                 "WADO-RS",
                 "Series metadata — full DICOM JSON for all instances in a series",
                 "application/dicom+json",
@@ -585,7 +601,9 @@ class DICOMwebLakeflowConnect(LakeflowConnect):
             ),
             (
                 "/studies/{uid}/series/{uid}/rendered",
-                f"/studies/{study_uid}/series/{series_uid}/rendered" if study_uid and series_uid else None,
+                f"/studies/{study_uid}/series/{series_uid}/rendered"
+                if study_uid and series_uid
+                else None,
                 "WADO-RS",
                 "Retrieve rendered series (all frames as viewport-ready images)",
                 "image/jpeg, image/png",
